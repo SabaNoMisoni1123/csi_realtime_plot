@@ -1,10 +1,13 @@
 #include <Packet.h>
 #include <PcapFileDevice.h>
+#include <chrono>
 #include <cmdline.h>
 #include <csi_reader_func.hpp>
 #include <filesystem>
 #include <iostream>
+#include <stdlib.h>
 #include <string>
+#include <thread>
 
 #include "csi_capture.hpp"
 
@@ -22,15 +25,16 @@ int main(int argc, char *argv[]) {
 
   reader->open();
 
-  reader->getNextPacket(raw_packet);
-  pcpp::Packet packet(&raw_packet);
+  while (reader->getNextPacket(raw_packet)) {
+    pcpp::Packet packet(&raw_packet);
+    cap.load_packet(packet);
+    if (cap.is_full_temp_csi()) {
+      cap.write_temp_csi();
+    }
 
-  cap.load_packet(packet);
-  std::cout << "log" << std::endl;
-  if (cap.is_full_temp_csi()) {
-    cap.write_temp_csi();
+    // 擬似的な待ち時間
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   reader->close();
-
 }
