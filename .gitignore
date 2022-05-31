@@ -1,0 +1,12 @@
+/**/sample*
+/**/build/
+/**/old/
+/**/out/
+/**/test/
+/.clangd/
+/.cache/
+/**/compile_commands.json
+/src/test*
+.DS_Store
+
+!/src/sample.cpp
