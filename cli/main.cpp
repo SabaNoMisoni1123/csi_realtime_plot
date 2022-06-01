@@ -1,5 +1,6 @@
+#include <algorithm>
 #include <cmdline.h>
-#include <csi_reader.hpp>
+#include <csi_capture.hpp>
 #include <csi_reader_func.hpp>
 #include <filesystem>
 #include <iostream>
@@ -8,35 +9,29 @@
 int main(int argc, char *argv[]) {
   // コマンドライン引数
   cmdline::parser ps;
-  ps.add<std::string>("file", 'f', "pcap file path", true);
-  ps.add<std::string>("outdir", 'o', "output directory", true);
-  ps.add<std::string>("device", 'd',
-                      "csi capture device ([\'asus\', \'raspi\'])", false,
-                      "asus");
-  ps.add("new-header", '\0', "new header");
-  ps.add<int>("nss", 'N', "number with spatial streams to capture", false, 4);
-  ps.add<int>("core", 'C', "number with cores where to active capture", false,
-              4);
+  ps.add<int>("time", 't', "time (second)", false, 20);
+  ps.add<std::string>("temp-dir", 'd', "temp dir", false, "");
+  ps.add<std::string>("macadd", 'm', "target MAC address", false, "");
   ps.parse_check(argc, argv);
 
-  // 相対パスの処理
-  std::filesystem::path pcap_path =
-      std::filesystem::absolute(ps.get<std::string>("file"));
-  std::filesystem::path outdir =
-      std::filesystem::absolute(ps.get<std::string>("outdir"));
-
-  // ファイルの存在確認
-  if (!std::filesystem::exists(pcap_path)) {
-    std::cout << "No such file " << pcap_path.string() << " ." << std::endl;
-    return 1;
+  // 一時保存ディレクトリ
+  std::filesystem::path temp_data_dir;
+  if (ps.exist("temp-dir")) {
+    temp_data_dir = std::filesystem::absolute(ps.get<std::string>("temp-dir"));
+  } else {
+    std::filesystem::path home_dir = std::getenv("HOME");
+    temp_data_dir = home_dir / "temp";
   }
 
-  csirdr::Csi_reader cr(pcap_path, outdir, ps.get<std::string>("device"),
-                        ps.exist("new-header"), ps.get<int>("nss"),
-                        ps.get<int>("core"));
-  cr.decode();
+  // 対象MACアドレス
+  std::string target_mac = ps.get<std::string>("macadd");
+  std::transform(target_mac.begin(), target_mac.end(), target_mac.begin(),
+                 tolower);
 
-  // 終了
+  csirdr::Csi_capture cap("wlan0", target_mac, 1, 1, true, true,
+                          temp_data_dir.string(), true);
+
+  cap.capture_packet(ps.get<int>("time"));
   std::cout << "DONE" << std::endl;
 
   return 0;

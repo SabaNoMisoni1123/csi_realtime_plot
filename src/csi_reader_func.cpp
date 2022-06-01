@@ -12,6 +12,12 @@
 
 namespace csirdr {
 
+std::vector<int> guard_band_sub_20 = {0, 1, 2, 3, 60, 61, 62, 63};
+std::vector<int> guard_band_sub_40 = {0,  1,   2,   3,   4,   5,   6,  63,
+                                      64, 122, 123, 124, 125, 126, 127};
+std::vector<int> guard_band_sub_80 = {0,   1,   2,   3,   4,   5,   6,  127,
+                                      128, 250, 251, 252, 253, 254, 255};
+
 csi_header get_csi_header(uint8_t *payload, bool new_header) {
   /*
    * UDPデータからCSIのヘッダ情報を読み取る関数
@@ -105,7 +111,7 @@ std::vector<std::vector<int>> get_csi_from_packet_bcm4366c0(uint8_t *payload,
   // パケット単位でのデコード結果の出力
   // ファイルへの書き出しは別の関数で実行
   // 書き出しはパケット単位にしておく
-  return cal_csi_bcm4366c0_int(csi_data_extracted);
+  return post_process_csi(cal_csi_bcm4366c0_int(csi_data_extracted));
 }
 
 std::vector<int> extract_csi_bcm4366c0(uint32_t csi_data_unit) {
@@ -260,13 +266,39 @@ csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len) {
     int16_t real = (int16_t)((csi_data_unit >> 16) & 0x0000FFFF);
     int16_t imag = (int16_t)(csi_data_unit & 0x0000FFFF);
     csi_data_extracted.push_back({real, imag});
-
-    // std::cout << std::hex << std::setw(8) << std::setfill('0') << csi_data_unit
-    //           << '\t' << std::dec << std::setw(8) << std::setfill(' ') << real
-    //           << '\t' << std::dec << std::setw(8) << std::setfill(' ') << imag
-    //           << std::endl;
   }
 
-  return csi_data_extracted;
+  return post_process_csi(csi_data_extracted);
+}
+
+csi_vec post_process_csi(csi_vec vec) {
+  // サブキャリア系列の前後半の入れ替え
+  int n_sub = (int)vec.size();
+  int n_sub_half = n_sub / 2;
+  int idx_vec;
+  csi_vec ret_vec(n_sub, std::vector<int>(2));
+
+  for (int idx_ret_vec = 0; idx_ret_vec < n_sub; idx_ret_vec++) {
+    // 周波数系列の前半後半を入れ替える
+    idx_vec = (idx_ret_vec + n_sub_half) % n_sub;
+    ret_vec[idx_ret_vec][0] = vec[idx_vec][0];
+    ret_vec[idx_ret_vec][1] = vec[idx_vec][1];
+  }
+
+  // ガードバンドの削除
+  std::vector<int> guard_band;
+  if (n_sub == 64) {
+    guard_band = guard_band_sub_20;
+  } else if (n_sub == 128) {
+    guard_band = guard_band_sub_40;
+  } else {
+    guard_band = guard_band_sub_80;
+  }
+
+  for (int i = 0; i < (int)guard_band.size(); i++) {
+    ret_vec[guard_band[i]][0] = 0;
+    ret_vec[guard_band[i]][1] = 0;
+  }
+  return ret_vec;
 }
 } // namespace csirdr

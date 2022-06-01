@@ -9,8 +9,7 @@
 #include <stdlib.h>
 #include <string>
 #include <thread>
-
-#include "csi_capture.hpp"
+#include <csi_capture.hpp>
 
 int main(int argc, char *argv[]) {
   std::filesystem::path home_dir = std::getenv("HOME");

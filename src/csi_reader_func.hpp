@@ -91,6 +91,16 @@ csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len);
  * return: csi_element_vec std::vector<int_16>
  */
 std::vector<int> extract_csi_raspi(uint32_t csi_data_unit);
+
+/*
+ * サブキャリア系列のCSIデータの処理をする関数
+ * 1. サブキャリア系列を前後半で入れ替える
+ * 2. ガードバンドの値を0にする
+ * input: csi_vec
+ * return: csi_vec
+ */
+csi_vec post_process_csi(csi_vec vec);
+
 } // namespace csirdr
 
 #endif /* end of include guard */

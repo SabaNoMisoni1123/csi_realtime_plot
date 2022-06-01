@@ -2,12 +2,12 @@ cmake_minimum_required(VERSION 3.1)
 project(lab_intern_2022 CXX)
 
 #  cli app
-# set(EXE_NAME labint)
-# add_executable(${EXE_NAME} cli/main.cpp src/csi_reader_func.cpp src/csi_reader.cpp)
+set(EXE_NAME nexlive)
+add_executable(${EXE_NAME} src/sample.cpp src/csi_reader_func.cpp src/csi_capture.cpp)
 
 #  develop
-set(EXE_NAME a.out)
-add_executable(${EXE_NAME} src/sample.cpp src/csi_reader_func.cpp src/csi_capture.cpp)
+# set(EXE_NAME a.out)
+# add_executable(${EXE_NAME} src/sample.cpp src/csi_reader_func.cpp src/csi_capture.cpp)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_COMPILER g++)

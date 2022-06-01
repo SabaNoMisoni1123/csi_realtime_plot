@@ -163,8 +163,7 @@ bool Csi_capture::write_csi_func() {
   // 順番はかなり大事
   // どうも前半と後半を入れ替える必要がある（20MHzではの話）
   int n_sub = (int)this->temp_csi[0].size();
-  int n_sub_half = n_sub / 2;
-  int sub_idx, e_idx;
+  int e_idx;
 
   // 空データはスキップ
   if (n_sub == 0) {
@@ -181,16 +180,15 @@ bool Csi_capture::write_csi_func() {
   }
 
   for (int sub = 0; sub < n_sub; sub++) {
-    sub_idx = (sub + n_sub_half) % n_sub; // 前後半入れ替えの処理
     for (int e = 0; e < this->n_csi_elements; e++) {
       e_idx = (e % this->n_rx) * this->n_rx + (e / this->n_tx); // 要素番号計算
       if (this->flag_realtime) {
-        this->ofs_csi_value << this->temp_csi[e_idx][sub_idx][0] << ','
-                            << this->temp_csi[e_idx][sub_idx][1] << std::endl;
+        this->ofs_csi_value << this->temp_csi[e_idx][sub][0] << ','
+                            << this->temp_csi[e_idx][sub][1] << std::endl;
       } else {
         this->ofs_csi_value << std::showpos << "("
-                            << this->temp_csi[e_idx][sub_idx][0]
-                            << this->temp_csi[e_idx][sub_idx][1] << "j"
+                            << this->temp_csi[e_idx][sub][0]
+                            << this->temp_csi[e_idx][sub][1] << "j"
                             << ")" << std::endl;
       }
     }
