@@ -19,6 +19,13 @@ set(PCAPPP_LIBS Pcap++ Packet++ Common++ pcap pthread)
 target_compile_options(${EXE_NAME} PUBLIC -O2 -Wall -std=c++2a)
 set(PCAPPP_ENABLE_CPP_FEATURE_DETECTION ON)
 
+if(APPLE)
+  message(STATUS "OS: APPLE")
+elseif(UNIX)
+  message(STATUS "OS: UNIX")
+  set(PCAPPP_LIBS ${PCAPPP_LIBS} stdc++fs)
+endif()
+
 include_directories(${PCAPPP_INCLUDES})
 link_directories(${PCAPPP_LIBS_DIR})
 target_link_libraries(${EXE_NAME} ${PCAPPP_LIBS})
