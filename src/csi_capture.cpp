@@ -146,6 +146,11 @@ void Csi_capture::write_temp_csi() {
 
   // ファイルストリームのクローズ
   this->ofs_csi_value.close();
+
+  // draw graph
+  if (this->is_graph()) {
+    this->draw_graph();
+  }
 }
 
 void Csi_capture::write_csi_func() {
@@ -181,7 +186,7 @@ void Csi_capture::init_gnuplot() {
   fprintf(this->gnuplot, "set terminal x11\n");
   fprintf(this->gnuplot, "set xrange [0:63]\n");
   fprintf(this->gnuplot, "set yrange [0:3000]\n");
-  fprintf(this->gnuplot, "set style line 1 lw 3 lc 1\n");
+  fprintf(this->gnuplot, "set style line 1 lw 5 lc \'blue\'\n");
   fprintf(this->gnuplot, "set nokey\n");
   fprintf(this->gnuplot, "set xlabel font\"*,20\"\n");
   fprintf(this->gnuplot, "set ylabel font\"*,20\"\n");
@@ -209,6 +214,8 @@ void on_packet_arrives(pcpp::RawPacket *raw_packet, pcpp::PcapLiveDevice *dev,
   Csi_capture *cap = (Csi_capture *)cookie;
 
   pcpp::Packet parsed_packet(raw_packet);
+  if (!parsed_packet.isPacketOfType(pcpp::UDP))
+    return;
 
   // デコードしてクラスのメンバ変数にCSIを一時保存
   cap->load_packet(parsed_packet);

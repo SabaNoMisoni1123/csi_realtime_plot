@@ -53,6 +53,11 @@ public:
   bool is_full_temp_csi();
 
   /*
+   *
+   */
+  inline bool is_graph(){return this->flag_graph;}
+
+  /*
    * 一時保存したCSIデータのクリア
    */
   void clear_temp_csi();
