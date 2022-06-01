@@ -7,7 +7,7 @@ project(lab_intern_2022 CXX)
 
 #  develop
 set(EXE_NAME a.out)
-add_executable(${EXE_NAME} src/sample.cpp src/csi_reader_func.cpp src/csi_capture.cpp)
+add_executable(${EXE_NAME} src/sample.cpp src/csi_reader_func.cpp src/csi_capture.cpp src/csi_realtime_viewer.cpp)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_COMPILER g++)

@@ -1,4 +1,5 @@
 #include <Packet.h>
+#include <PcapLiveDeviceList.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -15,7 +16,8 @@ namespace csirdr {
 class Csi_capture {
 public:
   std::filesystem::path output_dir; // 保存の指定をしていればこのディレクトリ
-  std::string device; // CSI取得のデバイス
+  std::string device;    // CSI取得のデバイス
+  std::string interface; // インターフェイス名
 
   /*
    * CSIの行列サイズの保存
@@ -28,10 +30,17 @@ public:
    * コンストラクタ
    * ファイルパスの保存と，MACアドレスの保存を実行
    */
-  Csi_capture(int nrx, int ntx, bool new_header, std::string device = "raspi",
-              bool realtime_flag = true, std::string output_dir = "out");
+  Csi_capture(std::string interface = "wlan0", int nrx = 1, int ntx = 1,
+              bool new_header = true, bool realtime_flag = true,
+              std::string output_dir = "out");
 
   ~Csi_capture(); // ディストラクタ
+
+  /*
+   * パケットキャプチャ関数
+   * キャプチャ，デコード，出力は一緒に実行
+   */
+  void capture_packet(uint32_t time = 10);
 
   /*
    * parsed packetからCSIを算出する関数
@@ -71,8 +80,22 @@ private:
    * 一時保存CSIの書き出し関数
    * 少し面倒な処理なので関数化
    */
-  void write_csi_func(std::ofstream &ofs);
+  void write_csi_func();
+
+  /*
+   * CSI書き出しのファイルストリーム
+   */
+  std::ofstream ofs_csi_value;
+
 };
+
+/*
+ * パケットキャプチャコールバック関数
+ * あえてクラスのメンバ関数にはしない
+ */
+void on_packet_arrives(pcpp::RawPacket *raw_packet, pcpp::PcapLiveDevice *dev,
+                       void *cookie);
+
 } // namespace csirdr
 
 #endif /* end of include guard */
