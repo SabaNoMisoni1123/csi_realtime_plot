@@ -15,14 +15,17 @@
 #include "csi_reader_func.hpp"
 
 namespace csirdr {
-Csi_capture::Csi_capture(std::string interface, int nrx, int ntx,
-                         bool new_header, bool realtime_flag,
+Csi_capture::Csi_capture(std::string interface, std::string target_mac, int nrx,
+                         int ntx, bool new_header, bool realtime_flag,
                          std::string output_dir, bool graph_flag) {
   // インターフェイス
   this->interface = interface;
 
   // ヘッダバージョン
   this->new_header = new_header;
+
+  // 対象機器のMACアドレスの末尾4ケタ
+  this->target_mac = target_mac;
 
   // アンテナ本数
   this->n_rx = nrx;
@@ -54,8 +57,7 @@ Csi_capture::Csi_capture(std::string interface, int nrx, int ntx,
             << "out dir: " << this->output_dir.string() << std::endl
             << "mode: " << (realtime_flag ? "realtime" : "no realtime")
             << std::endl
-            << "graph: " << (graph_flag ? "draw" : "no draw")
-            << std::endl;
+            << "graph: " << (graph_flag ? "draw" : "no draw") << std::endl;
   std::cout << "=========================================" << std::endl;
 }
 
@@ -106,6 +108,9 @@ void Csi_capture::load_packet(pcpp::Packet parsed_packet) {
   uint8_t *payload = udp_layer->getLayerPayload();
   int data_len = udp_layer->getDataLen();
 
+  // ヘッダーの保存
+  this->temp_header = csirdr::get_csi_header(payload, this->new_header);
+
   // CSIをデコードして保存
   // Csi_captureはraspi専用
   this->temp_csi.push_back(
@@ -139,7 +144,7 @@ void Csi_capture::write_temp_csi() {
   }
 
   // 書き込み処理
-  this->write_csi_func();
+  bool ret = this->write_csi_func();
 
   // clear temp_csi
   this->clear_temp_csi();
@@ -148,18 +153,32 @@ void Csi_capture::write_temp_csi() {
   this->ofs_csi_value.close();
 
   // draw graph
-  if (this->is_graph()) {
+  if (this->is_graph() and ret) {
     this->draw_graph();
   }
 }
 
-void Csi_capture::write_csi_func() {
+bool Csi_capture::write_csi_func() {
   // 書き込み関数は紀平さんのプログラムを参考にする
   // 順番はかなり大事
   // どうも前半と後半を入れ替える必要がある（20MHzではの話）
   int n_sub = (int)this->temp_csi[0].size();
   int n_sub_half = n_sub / 2;
   int sub_idx, e_idx;
+
+  // 空データはスキップ
+  if (n_sub == 0) {
+    return false;
+  }
+
+  // 対象MACアドレスの確認
+  std::stringstream macadd_tail_ss;
+  macadd_tail_ss << std::hex << std::setw(4) << std::setfill('0')
+                 << (this->temp_header.tx_mac_add & 0x0000FFFF);
+
+  if (this->target_mac != "" and this->target_mac != macadd_tail_ss.str()) {
+    return false;
+  }
 
   for (int sub = 0; sub < n_sub; sub++) {
     sub_idx = (sub + n_sub_half) % n_sub; // 前後半入れ替えの処理
@@ -176,6 +195,7 @@ void Csi_capture::write_csi_func() {
       }
     }
   }
+  return true;
 }
 
 void Csi_capture::init_gnuplot() {

@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
   std::filesystem::path temp_data_dir = home_dir / "temp";
 
   // CSI capture instance
-  csirdr::Csi_capture cap("wlan0", 1, 1, true, true, temp_data_dir.string(),
+  csirdr::Csi_capture cap("wlan0", "", 1, 1, true, true, temp_data_dir.string(),
                           true);
 
   cap.capture_packet(60);

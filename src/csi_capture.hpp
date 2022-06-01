@@ -16,8 +16,9 @@ namespace csirdr {
 class Csi_capture {
 public:
   std::filesystem::path output_dir; // 保存の指定をしていればこのディレクトリ
-  std::string device;    // CSI取得のデバイス
-  std::string interface; // インターフェイス名
+  std::string device;     // CSI取得のデバイス
+  std::string interface;  // インターフェイス名
+  std::string target_mac; // 対象機器のMACアドレスの末尾4ケタ
 
   /*
    * CSIの行列サイズの保存
@@ -30,9 +31,10 @@ public:
    * コンストラクタ
    * ファイルパスの保存と，MACアドレスの保存を実行
    */
-  Csi_capture(std::string interface = "wlan0", int nrx = 1, int ntx = 1,
-              bool new_header = true, bool realtime_flag = true,
-              std::string output_dir = "out", bool graph_flag = false);
+  Csi_capture(std::string interface = "wlan0", std::string target_mac="",
+              int nrx = 1, int ntx = 1, bool new_header = true,
+              bool realtime_flag = true, std::string output_dir = "out",
+              bool graph_flag = false);
 
   ~Csi_capture(); // ディストラクタ
 
@@ -55,7 +57,7 @@ public:
   /*
    *
    */
-  inline bool is_graph(){return this->flag_graph;}
+  inline bool is_graph() { return this->flag_graph; }
 
   /*
    * 一時保存したCSIデータのクリア
@@ -88,10 +90,16 @@ private:
   std::vector<csirdr::csi_vec> temp_csi;
 
   /*
+   * 取得ヘッダの一時保存
+   */
+  csirdr::csi_header temp_header;
+
+  /*
    * 一時保存CSIの書き出し関数
    * 少し面倒な処理なので関数化
+   * 書き出しの成否をboolで返却
    */
-  void write_csi_func();
+  bool write_csi_func();
 
   /*
    * CSI書き出しのファイルストリーム
