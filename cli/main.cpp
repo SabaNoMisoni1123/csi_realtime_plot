@@ -9,7 +9,7 @@
 int main(int argc, char *argv[]) {
   // コマンドライン引数
   cmdline::parser ps;
-  ps.add<int>("time", 't', "time (second)", false, 20);
+  ps.add<int>("time", 't', "time (second)", true);
   ps.add<std::string>("temp-dir", 'd', "temp dir", false, "");
   ps.add<std::string>("macadd", 'm', "target MAC address", false, "");
   ps.parse_check(argc, argv);

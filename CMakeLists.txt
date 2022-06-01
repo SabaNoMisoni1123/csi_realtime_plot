@@ -3,7 +3,7 @@ project(lab_intern_2022 CXX)
 
 #  cli app
 set(EXE_NAME nexlive)
-add_executable(${EXE_NAME} src/sample.cpp src/csi_reader_func.cpp src/csi_capture.cpp)
+add_executable(${EXE_NAME} cli/main.cpp src/csi_reader_func.cpp src/csi_capture.cpp)
 
 #  develop
 # set(EXE_NAME a.out)
