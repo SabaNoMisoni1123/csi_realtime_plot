@@ -96,6 +96,9 @@ void Csi_capture::write_temp_csi() {
   // 書き込み処理
   this->write_csi_func(fs_csi_value);
 
+  // clear temp_csi
+  this->clear_temp_csi();
+
   // ファイルストリームのクローズ
   fs_csi_value.close();
 }
