@@ -32,7 +32,7 @@ public:
    */
   Csi_capture(std::string interface = "wlan0", int nrx = 1, int ntx = 1,
               bool new_header = true, bool realtime_flag = true,
-              std::string output_dir = "out");
+              std::string output_dir = "out", bool graph_flag = false);
 
   ~Csi_capture(); // ディストラクタ
 
@@ -71,6 +71,12 @@ private:
   bool new_header;    // ヘッダのバージョン
   bool flag_realtime; // 累積させるのか，1つだけなのか
 
+  // グラフのためのメンバ
+  bool flag_graph;     // グラフ出力するのか
+  FILE *gnuplot;       // gnuplot標準入力
+  void init_gnuplot(); // gnuplot 初期設定
+  void draw_graph();   // グラフプロット
+
   /*
    * 取得CSIの一時保存
    */
@@ -86,7 +92,6 @@ private:
    * CSI書き出しのファイルストリーム
    */
   std::ofstream ofs_csi_value;
-
 };
 
 /*

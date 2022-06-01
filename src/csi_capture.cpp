@@ -17,7 +17,7 @@
 namespace csirdr {
 Csi_capture::Csi_capture(std::string interface, int nrx, int ntx,
                          bool new_header, bool realtime_flag,
-                         std::string output_dir) {
+                         std::string output_dir, bool graph_flag) {
   // インターフェイス
   this->interface = interface;
 
@@ -38,6 +38,12 @@ Csi_capture::Csi_capture(std::string interface, int nrx, int ntx,
     std::filesystem::create_directory(this->output_dir);
   }
 
+  // グラフ出力
+  this->flag_graph = graph_flag;
+  if (graph_flag) {
+    this->init_gnuplot();
+  }
+
   // 設定の出力
   std::cout << "=========================================" << std::endl;
   std::cout << "Header version: " << (new_header ? "new" : "old") << std::endl
@@ -47,11 +53,17 @@ Csi_capture::Csi_capture(std::string interface, int nrx, int ntx,
             << "n_csi_elements: " << this->n_csi_elements << std::endl
             << "out dir: " << this->output_dir.string() << std::endl
             << "mode: " << (realtime_flag ? "realtime" : "no realtime")
+            << std::endl
+            << "graph: " << (graph_flag ? "draw" : "no draw")
             << std::endl;
   std::cout << "=========================================" << std::endl;
 }
 
-Csi_capture::~Csi_capture() { ; }
+Csi_capture::~Csi_capture() {
+  if (this->flag_graph) {
+    pclose(this->gnuplot);
+  }
+}
 
 void Csi_capture::capture_packet(uint32_t time_sec) {
   // インターフェイスのオープン
@@ -159,6 +171,37 @@ void Csi_capture::write_csi_func() {
       }
     }
   }
+}
+
+void Csi_capture::init_gnuplot() {
+  // gnuplot shell open
+  this->gnuplot = popen("gnuplot", "w");
+  // gnuplot plot option setting
+  fprintf(this->gnuplot, "set datafile separator \',\'\n");
+  fprintf(this->gnuplot, "set terminal x11\n");
+  fprintf(this->gnuplot, "set xrange [0:63]\n");
+  fprintf(this->gnuplot, "set yrange [0:3000]\n");
+  fprintf(this->gnuplot, "set style line 1 lw 3 lc 1\n");
+  fprintf(this->gnuplot, "set nokey\n");
+  fprintf(this->gnuplot, "set xlabel font\"*,20\"\n");
+  fprintf(this->gnuplot, "set ylabel font\"*,20\"\n");
+  fprintf(this->gnuplot, "set tics font\"*,20\"\n");
+  fprintf(this->gnuplot, "set xlabel offset 0,0\n");
+  fprintf(this->gnuplot, "set ylabel offset -2,0\n");
+  fprintf(this->gnuplot, "set lmargin 12\n");
+  fprintf(this->gnuplot, "set xlabel \"Subcarrier index\"\n");
+  fprintf(this->gnuplot, "set ylabel \"CSI amplitude\"\n");
+  fflush(this->gnuplot);
+}
+
+void Csi_capture::draw_graph() {
+  std::filesystem::path temp_csi_path = this->output_dir / "csi_value.csv";
+  std::stringstream gnuplot_cmd_ss;
+  gnuplot_cmd_ss << "plot \"" << temp_csi_path.string()
+                 << "\" using ($0):(sqrt($1**2 + $2**2)) ls 1 with lines"
+                 << std::endl;
+  fprintf(gnuplot, gnuplot_cmd_ss.str().c_str());
+  fflush(gnuplot);
 }
 
 void on_packet_arrives(pcpp::RawPacket *raw_packet, pcpp::PcapLiveDevice *dev,
