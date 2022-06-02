@@ -224,8 +224,8 @@ void Csi_capture::draw_graph() {
   gnuplot_cmd_ss << "plot \"" << temp_csi_path.string()
                  << "\" using ($0):(sqrt($1**2 + $2**2)) ls 1 with lines"
                  << std::endl;
-  fprintf(gnuplot, gnuplot_cmd_ss.str().c_str());
-  fflush(gnuplot);
+  fprintf(this->gnuplot, gnuplot_cmd_ss.str().c_str());
+  fflush(this->gnuplot);
 }
 
 void on_packet_arrives(pcpp::RawPacket *raw_packet, pcpp::PcapLiveDevice *dev,
