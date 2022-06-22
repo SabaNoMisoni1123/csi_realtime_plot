@@ -187,12 +187,10 @@ std::vector<float> Csi_capture::get_temp_csi_series(std::string mode) {
       e_idx = (e % n_rx) * n_rx + (e / n_tx); // 要素番号計算
       if (mode == "amplitude") {
         csi_series[e + n_csi_elements * sub] =
-            std::abs(std::complex<float>(this->temp_csi[e_idx][sub].real(),
-                                         this->temp_csi[e_idx][sub].imag()));
+            std::abs(this->temp_csi[e_idx][sub]);
       } else if (mode == "phase") {
         csi_series[e + n_csi_elements * sub] =
-            std::arg(std::complex<float>(this->temp_csi[e_idx][sub].real(),
-                                         this->temp_csi[e_idx][sub].imag()));
+            std::arg(this->temp_csi[e_idx][sub]);
       }
     }
   }

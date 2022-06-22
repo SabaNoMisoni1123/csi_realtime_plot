@@ -27,7 +27,7 @@ typedef struct {
  * 1パケットからデコードされたCSIの型
  * (サブキャリア数，2)
  */
-typedef std::vector<std::complex<int>> csi_vec;
+typedef std::vector<std::complex<float>> csi_vec;
 
 /*
  * UDPのペイロードからCSI情報のヘッダ部分を読み取る関数
@@ -48,9 +48,11 @@ int cal_number_of_subcarrier(int data_len);
  * パケット単位のデコードを実現する
  * input: uint8_t *payload
  *        int data_len (= udp_layer->getDataLen())
- * return: csi_vec (std::vector<int>, size: (num_subcarrier, 2))
+ * return: csi_vec
  */
-csi_vec get_csi_from_packet_bcm4366c0(uint8_t *payload, int data_len, std::string wlan_std);
+csi_vec get_csi_from_packet_bcm4366c0(uint8_t *payload, int data_len,
+                                      std::string wlan_std,
+                                      bool rm_guard_pilot = true);
 
 /*
  * bcm4366c0専用のCSIデータ抽出関数
@@ -67,7 +69,7 @@ std::vector<int> extract_csi_bcm4366c0(uint32_t csi_data_unit);
  * input: extracted_csi (std::vector<std::vector<int_fast16_t>>)
  * return: csi (std::vector<std::vector<int>>)
  */
-csi_vec cal_csi_bcm4366c0_int(std::vector<std::vector<int>> extracted_csi);
+csi_vec cal_csi_bcm4366c0(std::vector<std::vector<int>> extracted_csi);
 
 /*
  * bcm4366c0専用のCSI計算関数の補助
@@ -76,16 +78,18 @@ csi_vec cal_csi_bcm4366c0_int(std::vector<std::vector<int>> extracted_csi);
  * input: x(int), e(int)
  * return: x_shft(int)
  */
-int shft_element_bcm4366c0(int x, int e);
+inline float float_element_bcm4366c0(int x, int e);
 
 /*k
  * raspi専用のUDPのペイロードからCSIを出力する関数
  * パケット単位のデコードを実現する
  * input: uint8_t *payload
  *        int data_len (= udp_layer->getDataLen())
- * return: csi_vec (std::vector<int>, size: (num_subcarrier, 2))
+ * return: csi_vec
  */
-csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len, std::string wlan_std);
+csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len,
+                                  std::string wlan_std,
+                                  bool rm_guard_pilot = true);
 
 /*
  * サブキャリア系列のCSIデータの処理をする関数

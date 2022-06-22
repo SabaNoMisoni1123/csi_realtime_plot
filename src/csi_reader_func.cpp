@@ -86,7 +86,8 @@ int cal_number_of_subcarrier(int data_len) {
 }
 
 csi_vec get_csi_from_packet_bcm4366c0(uint8_t *payload, int data_len,
-                                      std::string wlan_std) {
+                                      std::string wlan_std,
+                                      bool rm_guard_pilot) {
   uint8_t *csi_data =
       payload +
       CSI_HEADER_OFFSET; //  UDPデータのうち，ヘッダを除いたCSIデータのポインタ
@@ -122,7 +123,11 @@ csi_vec get_csi_from_packet_bcm4366c0(uint8_t *payload, int data_len,
   // パケット単位でのデコード結果の出力
   // ファイルへの書き出しは別の関数で実行
   // 書き出しはパケット単位にしておく
-  return post_process_csi(cal_csi_bcm4366c0_int(csi_data_extracted), wlan_std);
+  if (rm_guard_pilot) {
+    return post_process_csi(cal_csi_bcm4366c0(csi_data_extracted), wlan_std);
+  } else {
+    return cal_csi_bcm4366c0(csi_data_extracted);
+  }
 }
 
 std::vector<int> extract_csi_bcm4366c0(uint32_t csi_data_unit) {
@@ -166,88 +171,26 @@ std::vector<int> extract_csi_bcm4366c0(uint32_t csi_data_unit) {
   return ret;
 }
 
-csi_vec cal_csi_bcm4366c0_int(std::vector<std::vector<int>> extracted_csi) {
-  // nexmon csiが提供しているプログラムをそのまま使うだけ
-  // 正しい処理ではないので，doubleで返却するような
-  // 正しい処理の関数を将来的には作る必要がある．
-
-  // 最大ビット数を記録
-  // ありえない小さな数で初期化しているだけ
-  int maxbit = -MAX_EXPONENT_PART - 1;
-  int e_zero = -BITS_OF_NUMERICS_PART - 1;
-  int e;
-  uint32_t vi, vq;
-
-  // maxbitを算出
-  for (int i = 0; i < (int)extracted_csi.size(); i++) {
-
-    vi = extracted_csi[i][0] < 0 ? -extracted_csi[i][0] : extracted_csi[i][0];
-
-    vq = extracted_csi[i][1] < 0 ? -extracted_csi[i][1] : extracted_csi[i][1];
-    e = extracted_csi[i][2];
-
-    uint32_t x = vi | vq;
-    uint32_t m = 0xffff0000, b = 0x0000ffff;
-    int s = 16;
-
-    // よくわからん処理だけど，nexmon csiからコピペ
-    while (s > 0) {
-      if (x & m) {
-        e += s;
-        x >>= s;
-      }
-      s >>= 1;
-      m = (m >> s) & b;
-      b >>= s;
-    }
-    if (e > maxbit) {
-      maxbit = e;
-    }
-  }
-
-  // CSI計算
-  int shft = 10 - maxbit; // 謎定数
+csi_vec cal_csi_bcm4366c0(std::vector<std::vector<int>> extracted_csi) {
   int num_subcarrier = (int)extracted_csi.size();
-  csi_vec csi(num_subcarrier, std::complex<int>(0));
+  csi_vec csi(num_subcarrier, std::complex<float>(0));
 
   for (int sub = 0; sub < num_subcarrier; sub++) {
-    e = extracted_csi[sub][2] + shft;
-    int real_part = extracted_csi[sub][0];
-    int imag_part = extracted_csi[sub][1];
+    float real_part =
+        float_element_bcm4366c0(extracted_csi[sub][0], extracted_csi[sub][2]);
+    float imag_part =
+        float_element_bcm4366c0(extracted_csi[sub][1], extracted_csi[sub][2]);
 
-    // シフトの際は符号を外す
-    // シフト用の別の関数を用意しておく
-    if (e < e_zero) {
-      real_part = 0;
-      imag_part = 0;
-    } else {
-      real_part = shft_element_bcm4366c0(real_part, e);
-      imag_part = shft_element_bcm4366c0(imag_part, e);
-    }
-
-    csi[sub] = std::complex<int>(real_part, imag_part);
+    csi[sub] = std::complex<float>(real_part, imag_part);
   }
 
   return csi;
 }
 
-int shft_element_bcm4366c0(int x, int e) {
-  // シフト計算の前に符号を外して，あとからつける
-  int sgn = x >= 0 ? 1 : -1;
-  x = sgn * x;
-
-  if (e >= 0) {
-    x = (x << e);
-  } else {
-    e = -e;
-    x = (x >> e);
-  }
-
-  return sgn * x;
-}
+float float_element_bcm4366c0(int x, int e) { return x * pow(2.0, e); }
 
 csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len,
-                                  std::string wlan_std) {
+                                  std::string wlan_std, bool rm_guard_pilot) {
   uint8_t *csi_data =
       payload +
       CSI_HEADER_OFFSET; //  UDPデータのうち，ヘッダを除いたCSIデータのポインタ
@@ -277,10 +220,14 @@ csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len,
     // todo: 正負の確認を実験データから行う
     int16_t real = (int16_t)((csi_data_unit >> 16) & 0x0000FFFF);
     int16_t imag = (int16_t)(csi_data_unit & 0x0000FFFF);
-    csi_data_extracted[sub] = std::complex<int>(real, imag);
+    csi_data_extracted[sub] = std::complex<float>(real, imag);
   }
 
-  return post_process_csi(csi_data_extracted, wlan_std);
+  if (rm_guard_pilot) {
+    return post_process_csi(csi_data_extracted, wlan_std);
+  } else {
+    return csi_data_extracted;
+  }
 }
 
 csi_vec post_process_csi(csi_vec vec, std::string wlan_std) {
@@ -288,7 +235,7 @@ csi_vec post_process_csi(csi_vec vec, std::string wlan_std) {
   int n_sub = (int)vec.size();
   int n_sub_half = n_sub / 2;
   int idx_vec;
-  csi_vec ret_vec(n_sub, std::complex<int>(0));
+  csi_vec ret_vec(n_sub, std::complex<float>(0));
 
   for (int idx_ret_vec = 0; idx_ret_vec < n_sub; idx_ret_vec++) {
     // 周波数系列の前半後半を入れ替える
@@ -314,7 +261,7 @@ csi_vec post_process_csi(csi_vec vec, std::string wlan_std) {
   }
 
   for (int i = 0; i < (int)zero_sub.size(); i++) {
-    ret_vec[zero_sub[i]] = std::complex<int>(0, 0);
+    ret_vec[zero_sub[i]] = std::complex<float>(0., 0.);
   }
   return ret_vec;
 }
@@ -344,16 +291,10 @@ void write_csi(std::ofstream &ofs, std::vector<csi_vec> csi, int n_tx, int n_rx,
         temp_ss << csi[e_idx][sub].real() << ',' << csi[e_idx][sub].imag()
                 << std::endl;
       } else if (mode == 2) {
-        temp_ss << std::abs(std::complex<float>(csi[e_idx][sub].real(),
-                                                csi[e_idx][sub].imag()))
-                << ','
-                << std::arg(std::complex<float>(csi[e_idx][sub].real(),
-                                                csi[e_idx][sub].imag()))
+        temp_ss << std::abs(csi[e_idx][sub]) << ',' << std::arg(csi[e_idx][sub])
                 << std::endl;
       } else if (mode == 3) {
-        temp_ss << std::abs(std::complex<float>(csi[e_idx][sub].real(),
-                                                csi[e_idx][sub].imag()))
-                << ',';
+        temp_ss << std::abs(csi[e_idx][sub]) << ',';
       } else {
         temp_ss << csi[e_idx][sub].real() << ',' << csi[e_idx][sub].imag()
                 << ',';

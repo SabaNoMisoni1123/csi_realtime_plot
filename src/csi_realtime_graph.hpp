@@ -15,7 +15,7 @@
 
 namespace csirdr {
 class Csi_plot : public Csi_capture {
-protected:
+private:
   // gnuplotのパイプ
   FILE *gnuplot;
 
@@ -46,9 +46,9 @@ public:
                                         void *cookie);
 
   /*
-   * グラフに図示するもの
+   * グラフタイプの出力
    */
-  std::string graph_command();
+  std::string get_graph_type() { return this->graph_type; }
 };
 } // namespace csirdr
 
