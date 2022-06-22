@@ -58,11 +58,10 @@ sudo make install
 mcp -c 157/80 -C 1 -N 1 -m 00:11:22:33:44:55,aa:bb:aa:bb:aa:bb -b 0x88
 # m+IBEQGIAgAAESIzRFWqu6q7qrsAAAAAAAAAAAAAAAAAAA==
 
-pkill wpa_supplicant
 ifconfig wlan0 up
 nexutil -Iwlan0 -s500 -l34 -vm+IBEQGIAgAAESIzRFWqu6q7qrsAAAAAAAAAAAAAAAAAAA==
-iw phy `iw dev wlan0 info | gawk '/wiphy/ {printf "phy" $2}'` interface add mon0 type monitor
-ifconfig mon0 up
+iw dev wlan0 interface add mon0 type monitor
+ip link set mon0 up
 ```
 
 nexliveコマンドを実行する．
