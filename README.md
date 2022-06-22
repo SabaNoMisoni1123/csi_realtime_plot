@@ -5,6 +5,7 @@ Raspberry pi 4BにNexmon CSIを導入して，取得されるCSIをリアルタ�
 - pcapplusplus [seladb/PcapPlusPlus](https://github.com/seladb/PcapPlusPlus)
 - libpcap
 - gnuplot
+- cmdline.h [tanakh/cmdline](https://github.com/tanakh/cmdline)
 
 ## セットアップ
 
