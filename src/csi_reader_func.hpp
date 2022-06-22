@@ -1,3 +1,6 @@
+#include <complex>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <stdlib.h>
 #include <vector>
@@ -24,7 +27,7 @@ typedef struct {
  * 1パケットからデコードされたCSIの型
  * (サブキャリア数，2)
  */
-typedef std::vector<std::vector<int>> csi_vec;
+typedef std::vector<std::complex<int>> csi_vec;
 
 /*
  * UDPのペイロードからCSI情報のヘッダ部分を読み取る関数
@@ -47,7 +50,7 @@ int cal_number_of_subcarrier(int data_len);
  *        int data_len (= udp_layer->getDataLen())
  * return: csi_vec (std::vector<int>, size: (num_subcarrier, 2))
  */
-csi_vec get_csi_from_packet_bcm4366c0(uint8_t *payload, int data_len);
+csi_vec get_csi_from_packet_bcm4366c0(uint8_t *payload, int data_len, std::string wlan_std);
 
 /*
  * bcm4366c0専用のCSIデータ抽出関数
@@ -75,22 +78,14 @@ csi_vec cal_csi_bcm4366c0_int(std::vector<std::vector<int>> extracted_csi);
  */
 int shft_element_bcm4366c0(int x, int e);
 
-/*
+/*k
  * raspi専用のUDPのペイロードからCSIを出力する関数
  * パケット単位のデコードを実現する
  * input: uint8_t *payload
  *        int data_len (= udp_layer->getDataLen())
  * return: csi_vec (std::vector<int>, size: (num_subcarrier, 2))
  */
-csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len);
-
-/*
- * bcm4366c0専用のCSIデータ抽出関数
- * 4バイトのCSI１要素のデータから，実数部，虚数部出力
- * input: uint_32 csi_data_unit
- * return: csi_element_vec std::vector<int_16>
- */
-std::vector<int> extract_csi_raspi(uint32_t csi_data_unit);
+csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len, std::string wlan_std);
 
 /*
  * サブキャリア系列のCSIデータの処理をする関数
@@ -99,7 +94,19 @@ std::vector<int> extract_csi_raspi(uint32_t csi_data_unit);
  * input: csi_vec
  * return: csi_vec
  */
-csi_vec post_process_csi(csi_vec vec);
+csi_vec post_process_csi(csi_vec vec, std::string wlan_std);
+
+/*
+ * 完全なCSIのサブキャリア系列をofstreamに出力
+ * CSV形式で出力
+ * いろいろな出力形式をここで実装
+ * mode 0: numpy複素数に対応（サンプル数，サブキャリア数x要素数）
+ * mode 1: 実部と虚部で2列（サンプル数xサブキャリア数x要素数x2，2）
+ * mode 2: 大きさと偏角で2列（サンプル数xサブキャリア数x要素数x2，2）
+ * mode 3: 行の先頭にラベル（サンプル数，サブキャリア数x要素数 + 1）
+ */
+void write_csi(std::ofstream &ofs, std::vector<csi_vec> csi, int n_tx, int n_rx,
+               int mode = 0, int label = 0);
 
 } // namespace csirdr
 

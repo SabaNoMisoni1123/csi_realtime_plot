@@ -3,20 +3,30 @@
 #include <PcapFileDevice.h>
 #include <UdpLayer.h>
 #include <bitset>
+#include <complex>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <stdlib.h>
+#include <string>
 #include <vector>
 
 #include "csi_reader_func.hpp"
 
 namespace csirdr {
 
-std::vector<int> guard_band_sub_20 = {0, 1, 2, 3, 60, 61, 62, 63};
-std::vector<int> guard_band_sub_40 = {0,  1,   2,   3,   4,   5,   6,  63,
-                                      64, 122, 123, 124, 125, 126, 127};
-std::vector<int> guard_band_sub_80 = {0,   1,   2,   3,   4,   5,   6,  127,
-                                      128, 250, 251, 252, 253, 254, 255};
+std::vector<int> zero_sub_20_ac = {0, 1, 2, 3, 32, 61, 62, 63, 11, 25, 39, 53};
+std::vector<int> zero_sub_40_ac = {0,   1,   2,   3,   4,  5,  63, 64, 65, 123,
+                                   124, 125, 126, 127, 11, 39, 53, 75, 89, 117};
+std::vector<int> zero_sub_80_ac = {0,   1,   2,   3,   4,   5,   127, 128,
+                                   129, 251, 252, 253, 254, 255, 25,  53,
+                                   89,  117, 139, 167, 203, 231};
+std::vector<int> zero_sub_20_ax = {0, 1, 2, 3, 11, 25, 39, 53, 32, 61, 62, 63};
+std::vector<int> zero_sub_40_ax = {0,   1,   2,   3,   4,  5,  63, 64, 65, 123,
+                                   124, 125, 126, 127, 11, 39, 53, 75, 89, 117};
+std::vector<int> zero_sub_80_ax = {0,   1,   2,   3,   25,  53,  88,  117, 127,
+                                   128, 129, 139, 168, 203, 231, 253, 254, 255};
 
 csi_header get_csi_header(uint8_t *payload, bool new_header) {
   /*
@@ -25,15 +35,15 @@ csi_header get_csi_header(uint8_t *payload, bool new_header) {
    * ヘッダの構造体を返却
    * ヘッダがバージョンによって変わっているので，それに対応する必要がある
    */
-  csi_header header = {0, 0, 0};
+  csi_header header;
 
   if (new_header) {
     // 新しいタイプのヘッダ
-    for (int i = 2; i < 8; i++) {
+    for (int i = 4; i < 10; i++) {
       // MACアドレスはビックエンディアン
       header.tx_mac_add = (header.tx_mac_add << BITS_PER_BYTE) | payload[i];
     }
-    for (int i = 8; i < 10; i++) {
+    for (int i = 10; i < 12; i++) {
       // シーケンス番号はリトルエンディアン？
       // 配布プログラムの結果と比較した結果
       header.seq_num = (header.seq_num << BITS_PER_BYTE) | payload[17 - i];
@@ -75,8 +85,8 @@ int cal_number_of_subcarrier(int data_len) {
   }
 }
 
-std::vector<std::vector<int>> get_csi_from_packet_bcm4366c0(uint8_t *payload,
-                                                            int data_len) {
+csi_vec get_csi_from_packet_bcm4366c0(uint8_t *payload, int data_len,
+                                      std::string wlan_std) {
   uint8_t *csi_data =
       payload +
       CSI_HEADER_OFFSET; //  UDPデータのうち，ヘッダを除いたCSIデータのポインタ
@@ -87,7 +97,8 @@ std::vector<std::vector<int>> get_csi_from_packet_bcm4366c0(uint8_t *payload,
 
   // UDPペイロードから読み出したCSIデータの保存
   // 実数部，虚数部，指数部をサブキャリアの個数だけ格納する．
-  std::vector<std::vector<int>> csi_data_extracted(0, std::vector<int>(0, 3));
+  std::vector<std::vector<int>> csi_data_extracted(num_subcarrier,
+                                                   std::vector<int>(3, 0));
 
   // バイナリから，実部・虚部・指数部を取り出す部分
   // サブキャリア数で繰り返す
@@ -103,7 +114,7 @@ std::vector<std::vector<int>> get_csi_from_packet_bcm4366c0(uint8_t *payload,
 
     // 専用の抽出関数に投げて出力を得る．
     // サブキャリア全体のデータを格納する
-    csi_data_extracted.push_back(extract_csi_bcm4366c0(csi_data_unit));
+    csi_data_extracted[sub] = extract_csi_bcm4366c0(csi_data_unit);
   }
 
   // 実部・虚部に対して，指数部を反映させて出力を完成させる部分
@@ -111,7 +122,7 @@ std::vector<std::vector<int>> get_csi_from_packet_bcm4366c0(uint8_t *payload,
   // パケット単位でのデコード結果の出力
   // ファイルへの書き出しは別の関数で実行
   // 書き出しはパケット単位にしておく
-  return post_process_csi(cal_csi_bcm4366c0_int(csi_data_extracted));
+  return post_process_csi(cal_csi_bcm4366c0_int(csi_data_extracted), wlan_std);
 }
 
 std::vector<int> extract_csi_bcm4366c0(uint32_t csi_data_unit) {
@@ -155,8 +166,7 @@ std::vector<int> extract_csi_bcm4366c0(uint32_t csi_data_unit) {
   return ret;
 }
 
-std::vector<std::vector<int>>
-cal_csi_bcm4366c0_int(std::vector<std::vector<int>> extracted_csi) {
+csi_vec cal_csi_bcm4366c0_int(std::vector<std::vector<int>> extracted_csi) {
   // nexmon csiが提供しているプログラムをそのまま使うだけ
   // 正しい処理ではないので，doubleで返却するような
   // 正しい処理の関数を将来的には作る必要がある．
@@ -197,12 +207,13 @@ cal_csi_bcm4366c0_int(std::vector<std::vector<int>> extracted_csi) {
 
   // CSI計算
   int shft = 10 - maxbit; // 謎定数
-  std::vector<std::vector<int>> csi(0, std::vector<int>(0, 2));
+  int num_subcarrier = (int)extracted_csi.size();
+  csi_vec csi(num_subcarrier, std::complex<int>(0));
 
-  for (int i = 0; i < (int)extracted_csi.size(); i++) {
-    e = extracted_csi[i][2] + shft;
-    int real_part = extracted_csi[i][0];
-    int imag_part = extracted_csi[i][1];
+  for (int sub = 0; sub < num_subcarrier; sub++) {
+    e = extracted_csi[sub][2] + shft;
+    int real_part = extracted_csi[sub][0];
+    int imag_part = extracted_csi[sub][1];
 
     // シフトの際は符号を外す
     // シフト用の別の関数を用意しておく
@@ -214,7 +225,7 @@ cal_csi_bcm4366c0_int(std::vector<std::vector<int>> extracted_csi) {
       imag_part = shft_element_bcm4366c0(imag_part, e);
     }
 
-    csi.push_back({real_part, imag_part});
+    csi[sub] = std::complex<int>(real_part, imag_part);
   }
 
   return csi;
@@ -235,7 +246,8 @@ int shft_element_bcm4366c0(int x, int e) {
   return sgn * x;
 }
 
-csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len) {
+csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len,
+                                  std::string wlan_std) {
   uint8_t *csi_data =
       payload +
       CSI_HEADER_OFFSET; //  UDPデータのうち，ヘッダを除いたCSIデータのポインタ
@@ -246,7 +258,7 @@ csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len) {
 
   // UDPペイロードから読み出したCSIデータの保存
   // 実部，虚部をサブキャリアの個数だけ格納する．
-  std::vector<std::vector<int>> csi_data_extracted(0, std::vector<int>(0, 2));
+  csi_vec csi_data_extracted(num_subcarrier);
 
   // バイナリから，実部・虚部を取り出す部分
   // サブキャリア数で繰り返す
@@ -265,40 +277,96 @@ csi_vec get_csi_from_packet_raspi(uint8_t *payload, int data_len) {
     // todo: 正負の確認を実験データから行う
     int16_t real = (int16_t)((csi_data_unit >> 16) & 0x0000FFFF);
     int16_t imag = (int16_t)(csi_data_unit & 0x0000FFFF);
-    csi_data_extracted.push_back({real, imag});
+    csi_data_extracted[sub] = std::complex<int>(real, imag);
   }
 
-  return post_process_csi(csi_data_extracted);
+  return post_process_csi(csi_data_extracted, wlan_std);
 }
 
-csi_vec post_process_csi(csi_vec vec) {
+csi_vec post_process_csi(csi_vec vec, std::string wlan_std) {
   // サブキャリア系列の前後半の入れ替え
   int n_sub = (int)vec.size();
   int n_sub_half = n_sub / 2;
   int idx_vec;
-  csi_vec ret_vec(n_sub, std::vector<int>(2));
+  csi_vec ret_vec(n_sub, std::complex<int>(0));
 
   for (int idx_ret_vec = 0; idx_ret_vec < n_sub; idx_ret_vec++) {
     // 周波数系列の前半後半を入れ替える
     idx_vec = (idx_ret_vec + n_sub_half) % n_sub;
-    ret_vec[idx_ret_vec][0] = vec[idx_vec][0];
-    ret_vec[idx_ret_vec][1] = vec[idx_vec][1];
+    ret_vec[idx_ret_vec] = vec[idx_vec];
   }
 
-  // ガードバンドの削除
-  std::vector<int> guard_band;
-  if (n_sub == 64) {
-    guard_band = guard_band_sub_20;
-  } else if (n_sub == 128) {
-    guard_band = guard_band_sub_40;
-  } else {
-    guard_band = guard_band_sub_80;
+  // ガードバンドとパイロットサブキャリアでの
+  // CSIの要素を削除
+  std::vector<int> zero_sub;
+  if (n_sub == 64 and wlan_std == "ac") {
+    zero_sub = zero_sub_20_ac;
+  } else if (n_sub == 128 and wlan_std == "ac") {
+    zero_sub = zero_sub_40_ac;
+  } else if (n_sub == 256 and wlan_std == "ac") {
+    zero_sub = zero_sub_80_ac;
+  } else if (n_sub == 64 and wlan_std == "ax") {
+    zero_sub = zero_sub_80_ax;
+  } else if (n_sub == 128 and wlan_std == "ax") {
+    zero_sub = zero_sub_80_ax;
+  } else if (n_sub == 256 and wlan_std == "ax") {
+    zero_sub = zero_sub_80_ax;
   }
 
-  for (int i = 0; i < (int)guard_band.size(); i++) {
-    ret_vec[guard_band[i]][0] = 0;
-    ret_vec[guard_band[i]][1] = 0;
+  for (int i = 0; i < (int)zero_sub.size(); i++) {
+    ret_vec[zero_sub[i]] = std::complex<int>(0, 0);
   }
   return ret_vec;
 }
+
+void write_csi(std::ofstream &ofs, std::vector<csi_vec> csi, int n_tx, int n_rx,
+               int mode, int label) {
+  int n_sub = (int)csi[0].size();
+  int e_idx;
+
+  // 1行分の一時保存（いい方法が思いつかなかった）
+  std::stringstream temp_ss;
+  std::string temp_str;
+
+  // データセット作成モード（mode==3）
+  if (mode == 3) {
+    temp_ss << label << ',';
+  }
+
+  for (int sub = 0; sub < n_sub; sub++) {
+    for (int e = 0; e < n_tx * n_rx; e++) {
+      e_idx = (e % n_rx) * n_rx + (e / n_tx); // 要素番号計算
+      if (mode == 0) {
+        temp_ss << std::noshowpos << "(" << csi[e_idx][sub].real()
+                << std::showpos << csi[e_idx][sub].imag() << "j"
+                << "),";
+      } else if (mode == 1) {
+        temp_ss << csi[e_idx][sub].real() << ',' << csi[e_idx][sub].imag()
+                << std::endl;
+      } else if (mode == 2) {
+        temp_ss << std::abs(std::complex<float>(csi[e_idx][sub].real(),
+                                                csi[e_idx][sub].imag()))
+                << ','
+                << std::arg(std::complex<float>(csi[e_idx][sub].real(),
+                                                csi[e_idx][sub].imag()))
+                << std::endl;
+      } else if (mode == 3) {
+        temp_ss << std::abs(std::complex<float>(csi[e_idx][sub].real(),
+                                                csi[e_idx][sub].imag()))
+                << ',';
+      } else {
+        temp_ss << csi[e_idx][sub].real() << ',' << csi[e_idx][sub].imag()
+                << ',';
+      }
+    }
+  }
+
+  // カンマ区切りで，最後のカンマを消す
+  // よりよい方法があれば変更する．
+  temp_str = temp_ss.str();
+  temp_str.pop_back();
+
+  ofs << temp_str << std::endl;
+}
+
 } // namespace csirdr

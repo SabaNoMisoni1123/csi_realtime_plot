@@ -1,10 +1,11 @@
-#include <algorithm>
 #include <cmdline.h>
-#include <csi_capture.hpp>
-#include <csi_reader_func.hpp>
 #include <filesystem>
 #include <iostream>
 #include <string>
+
+#include <csi_capture.hpp>
+#include <csi_reader_func.hpp>
+#include <csi_realtime_graph.hpp>
 
 int main(int argc, char *argv[]) {
   // コマンドライン引数
@@ -12,6 +13,11 @@ int main(int argc, char *argv[]) {
   ps.add<int>("time", 't', "time (second)", true);
   ps.add<std::string>("temp-dir", 'd', "temp dir", false, "");
   ps.add<std::string>("macadd", 'm', "target MAC address", false, "");
+  ps.add<int>("num-sub", 'n', "Number of subcarrier for graph plot", false,
+              256);
+  ps.add<int>("height", 'h', "Max value of graph's y axis", false, 3000);
+  ps.add<std::string>("wlan-std", 's', "wlan standard [\'ac\', \'ax\']",
+                      false, "ac");
   ps.parse_check(argc, argv);
 
   // 一時保存ディレクトリ
@@ -19,8 +25,7 @@ int main(int argc, char *argv[]) {
   if (ps.exist("temp-dir")) {
     temp_data_dir = std::filesystem::absolute(ps.get<std::string>("temp-dir"));
   } else {
-    std::filesystem::path home_dir = std::getenv("HOME");
-    temp_data_dir = home_dir / "temp";
+    temp_data_dir = std::filesystem::absolute("temp");
   }
 
   // 対象MACアドレス
@@ -28,11 +33,12 @@ int main(int argc, char *argv[]) {
   std::transform(target_mac.begin(), target_mac.end(), target_mac.begin(),
                  tolower);
 
-  csirdr::Csi_capture cap("wlan0", target_mac, 1, 1, true, true,
-                          temp_data_dir.string(), true);
+  csirdr::Csi_plot cap(target_mac, 1, 1, true, ps.get<std::string>("wlan-std"),
+                       temp_data_dir.string());
 
-  cap.capture_packet(ps.get<int>("time"));
-  std::cout << "DONE" << std::endl;
+  cap.run_graph(ps.get<int>("time"), ps.get<int>("height"),
+                ps.get<int>("num-sub"), "abs");
+  std::cout << "\n\n\nDONE" << std::endl;
 
   return 0;
 }

@@ -16,14 +16,26 @@
 #include "csi_reader_func.hpp"
 
 namespace csirdr {
+Csi_capture::Csi_capture() {
+  this->interface = "wlan0";
+  this->target_mac = "";
+  this->n_rx = 1;
+  this->n_tx = 1;
+  this->new_header = true;
+  this->wlan_std = "ac";
+  this->dir_output = std::filesystem::absolute("out");
+}
 Csi_capture::Csi_capture(std::string interface, std::string target_mac, int nrx,
-                         int ntx, bool new_header, bool realtime_flag,
-                         std::string output_dir, bool graph_flag) {
+                         int ntx, bool new_header, std::string wlan_std,
+                         std::string output_dir) {
   // インターフェイス
   this->interface = interface;
 
   // ヘッダバージョン
   this->new_header = new_header;
+
+  // 標準規格
+  this->wlan_std = wlan_std;
 
   // 対象機器のMACアドレスの末尾4ケタ
   this->target_mac = target_mac;
@@ -34,50 +46,36 @@ Csi_capture::Csi_capture(std::string interface, std::string target_mac, int nrx,
   this->n_csi_elements = nrx * ntx;
 
   // 出力設定
-  this->flag_realtime = realtime_flag;
-  this->output_dir = std::filesystem::absolute(output_dir);
+  this->dir_output = std::filesystem::absolute(output_dir);
+  this->save_mode = 0;
 
   // 保存パスの作成
-  if (!std::filesystem::exists(this->output_dir)) {
-    std::filesystem::create_directory(this->output_dir);
+  if (!std::filesystem::exists(this->dir_output)) {
+    std::filesystem::create_directory(this->dir_output);
   }
-
-  // グラフ出力
-  this->flag_graph = graph_flag;
-  if (graph_flag) {
-    this->init_gnuplot();
-  }
+  this->path_csi_value = this->dir_output / "csi_value.csv";
+  this->path_csi_seq = this->dir_output / "csi_seq.csv";
 
   // 設定の出力
   std::cout << "=========================================" << std::endl;
   std::cout << "Header version: " << (new_header ? "new" : "old") << std::endl
             << "interface: " << this->interface << std::endl
+            << "wlan standard: " << this->wlan_std << std::endl
             << "n_tx: " << this->n_tx << std::endl
             << "n_rx: " << this->n_rx << std::endl
             << "n_csi_elements: " << this->n_csi_elements << std::endl
-            << "out dir: " << this->output_dir.string() << std::endl
-            << "mode: " << (realtime_flag ? "realtime" : "no realtime")
-            << std::endl
-            << "graph: " << (graph_flag ? "draw" : "no draw") << std::endl;
+            << "out dir: " << this->dir_output.string() << std::endl
+            << "target mac: " << this->target_mac << std::endl
+            << std::endl;
   std::cout << "=========================================" << std::endl;
-}
 
-Csi_capture::~Csi_capture() {
-  if (this->flag_graph) {
-    pclose(this->gnuplot);
-  }
-}
-
-void Csi_capture::capture_packet(uint32_t time_sec) {
-  // インターフェイスのオープン
-  pcpp::PcapLiveDevice *dev =
-      pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(
-          this->interface);
-  if (dev == NULL) {
+  // インターフェイス
+  this->dev = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(
+      this->interface);
+  if (this->dev == NULL) {
     std::cerr << "Cannot find interface: " << this->interface << std::endl;
   }
-
-  // インターフェイスの詳細情報
+  std::cout << "=========================================" << std::endl;
   std::cout << "Interface info:" << std::endl
             << "   Interface name:        " << dev->getName()
             << std::endl // get interface name
@@ -89,19 +87,62 @@ void Csi_capture::capture_packet(uint32_t time_sec) {
             << std::endl // get default gateway
             << "   Interface MTU:         " << dev->getMtu()
             << std::endl; // get interface MTU
+  std::cout << "=========================================" << std::endl;
+}
 
-  if (!dev->open()) {
+Csi_capture::~Csi_capture() { ; }
+
+void Csi_capture::capture_packet(uint32_t time_sec) {
+  // デバイスのオープン
+  if (!this->dev->open()) {
     std::cerr << "Cannot open devie: " << this->interface << std::endl;
   }
 
   // キャプチャ開始
-  dev->pcpp::PcapLiveDevice::startCapture(on_packet_arrives, this);
+  this->dev->pcpp::PcapLiveDevice::startCapture(this->on_packet_arrives, this);
 
-  // 測定時間sleep
+  // 測定時間のsleep
+  // この時間の処理は，キャプチャー時のコールバック関数で実装する
   pcpp::multiPlatformSleep(time_sec);
 
   // キャプチャ終了
-  dev->pcpp::PcapLiveDevice::stopCapture();
+  this->dev->pcpp::PcapLiveDevice::stopCapture();
+
+  // デバイスのクローズ
+  this->dev->close();
+}
+
+void Csi_capture::on_packet_arrives(pcpp::RawPacket *raw_packet,
+                                    pcpp::PcapLiveDevice *dev, void *cookie) {
+  pcpp::Packet parsed_packet(raw_packet);
+  if (!parsed_packet.isPacketOfType(pcpp::UDP))
+    return;
+
+  Csi_capture *cap = (Csi_capture *)cookie;
+
+  // デコードしてクラスのメンバ変数にCSIを一時保存
+  cap->load_packet(parsed_packet);
+
+  // MACアドレスの表示
+  std::cout << "\rtarget MAC address: " << cap->get_target_mac_add()
+            << ", this CSI MAC address: " << cap->get_temp_mac_add();
+
+  // CSIの数が足りてなければ終了
+  if (!cap->is_full_temp_csi()) {
+    return;
+  }
+
+  // MACアドレスが異なれば終了
+  if (!cap->is_target_mac()) {
+    cap->clear_temp_csi();
+    return;
+  }
+
+  // デコードしてクラスのメンバ変数にCSIを一時保存
+  if (cap->is_full_temp_csi()) {
+    cap->write_temp_csi(cap->csi_save_mode(), cap->csi_label());
+    cap->clear_temp_csi();
+  }
 }
 
 void Csi_capture::load_packet(pcpp::Packet parsed_packet) {
@@ -115,7 +156,7 @@ void Csi_capture::load_packet(pcpp::Packet parsed_packet) {
   // CSIをデコードして保存
   // Csi_captureはraspi専用
   this->temp_csi.push_back(
-      csirdr::get_csi_from_packet_raspi(payload, data_len));
+      csirdr::get_csi_from_packet_raspi(payload, data_len, this->wlan_std));
 }
 
 bool Csi_capture::is_full_temp_csi() {
@@ -133,116 +174,98 @@ std::vector<csirdr::csi_vec> Csi_capture::get_temp_csi() {
   return this->temp_csi;
 }
 
-void Csi_capture::write_temp_csi() {
-  // ファイル名，ファイルストリーム
-  std::filesystem::path csi_value_path = this->output_dir / "csi_value.csv";
-
-  // ファイルストリームのオープンは初期化するのか追記するのかで分ける
-  if (this->flag_realtime) {
-    this->ofs_csi_value.open(csi_value_path.string());
-  } else {
-    this->ofs_csi_value.open(csi_value_path.string(), std::ios::app);
-  }
-
-  // 書き込み処理
-  bool ret = this->write_csi_func();
-
-  // clear temp_csi
-  this->clear_temp_csi();
-
-  // ファイルストリームのクローズ
-  this->ofs_csi_value.close();
-
-  // draw graph
-  if (this->is_graph() and ret) {
-    this->draw_graph();
-  }
-}
-
-bool Csi_capture::write_csi_func() {
-  // 書き込み関数は紀平さんのプログラムを参考にする
-  // 順番はかなり大事
-  // どうも前半と後半を入れ替える必要がある（20MHzではの話）
+std::vector<float> Csi_capture::get_temp_csi_series(std::string mode) {
   int n_sub = (int)this->temp_csi[0].size();
+  int n_csi_elements = (int)this->temp_csi.size();
+  int n_rx = this->n_rx;
+  int n_tx = this->n_tx;
   int e_idx;
-
-  // 空データはスキップ
-  if (n_sub == 0) {
-    return false;
-  }
-
-  // 対象MACアドレスの確認
-  std::stringstream macadd_tail_ss;
-  macadd_tail_ss << std::hex << std::setw(4) << std::setfill('0')
-                 << (this->temp_header.tx_mac_add & 0x0000FFFF);
-
-  if (this->target_mac != "" and this->target_mac != macadd_tail_ss.str()) {
-    return false;
-  }
+  std::vector<float> csi_series(n_sub * n_csi_elements, 0.0);
 
   for (int sub = 0; sub < n_sub; sub++) {
-    for (int e = 0; e < this->n_csi_elements; e++) {
-      e_idx = (e % this->n_rx) * this->n_rx + (e / this->n_tx); // 要素番号計算
-      if (this->flag_realtime) {
-        this->ofs_csi_value << this->temp_csi[e_idx][sub][0] << ','
-                            << this->temp_csi[e_idx][sub][1] << std::endl;
-      } else {
-        this->ofs_csi_value << std::showpos << "("
-                            << this->temp_csi[e_idx][sub][0]
-                            << this->temp_csi[e_idx][sub][1] << "j"
-                            << ")" << std::endl;
+    for (int e = 0; e < n_csi_elements; e++) {
+      e_idx = (e % n_rx) * n_rx + (e / n_tx); // 要素番号計算
+      if (mode == "amplitude") {
+        csi_series[e + n_csi_elements * sub] =
+            std::abs(std::complex<float>(this->temp_csi[e_idx][sub].real(),
+                                         this->temp_csi[e_idx][sub].imag()));
+      } else if (mode == "phase") {
+        csi_series[e + n_csi_elements * sub] =
+            std::arg(std::complex<float>(this->temp_csi[e_idx][sub].real(),
+                                         this->temp_csi[e_idx][sub].imag()));
       }
     }
   }
-  return true;
+
+  return csi_series;
 }
 
-void Csi_capture::init_gnuplot() {
-  // gnuplot shell open
-  this->gnuplot = popen("gnuplot", "w");
-  // gnuplot plot option setting
-  fprintf(this->gnuplot, "set datafile separator \',\'\n");
-  fprintf(this->gnuplot, "set terminal x11\n");
-  fprintf(this->gnuplot, "set xrange [0:63]\n");
-  fprintf(this->gnuplot, "set yrange [0:3000]\n");
-  fprintf(this->gnuplot, "set style line 1 lw 5 lc \'blue\'\n");
-  fprintf(this->gnuplot, "set nokey\n");
-  fprintf(this->gnuplot, "set xlabel font\"*,20\"\n");
-  fprintf(this->gnuplot, "set ylabel font\"*,20\"\n");
-  fprintf(this->gnuplot, "set tics font\"*,20\"\n");
-  fprintf(this->gnuplot, "set xlabel offset 0,0\n");
-  fprintf(this->gnuplot, "set ylabel offset -2,0\n");
-  fprintf(this->gnuplot, "set lmargin 12\n");
-  fprintf(this->gnuplot, "set xlabel \"Subcarrier index\"\n");
-  fprintf(this->gnuplot, "set ylabel \"CSI amplitude\"\n");
-  fflush(this->gnuplot);
+void Csi_capture::write_temp_csi(int save_mode, int label, bool continuous) {
+  if (continuous) {
+    this->ofs_csi_value.open(path_csi_value.string(), std::ios::app);
+  } else {
+    std::stringstream basename_value_ss;
+    basename_value_ss << "csi_value_" << std::setw(4) << std::setfill('0')
+                      << this->n_file << ".csv";
+    this->n_file = (this->n_file + 1) % N_ROTATE;
+    this->path_csi_value = this->dir_output / basename_value_ss.str();
+    this->ofs_csi_value.open(path_csi_value.string());
+  }
+  this->ofs_csi_seq.open(path_csi_seq.string(), std::ios::app);
+
+  // 書き込み処理
+  csirdr::write_csi(this->ofs_csi_value, this->temp_csi, this->n_tx, this->n_rx,
+                    save_mode, label);
+
+  this->ofs_csi_seq << std::hex << std::setw(4) << std::setfill('0')
+                    << (this->temp_header.tx_mac_add & 0x0000FFFF) << ","
+                    << std::dec << this->temp_header.seq_num / 16 << ","
+                    << this->temp_header.seq_num % 16 << std::endl;
+
+  // ファイルストリームのクローズ
+  this->ofs_csi_value.close();
+  this->ofs_csi_seq.close();
 }
 
-void Csi_capture::draw_graph() {
-  std::filesystem::path temp_csi_path = this->output_dir / "csi_value.csv";
-  std::stringstream gnuplot_cmd_ss;
-  gnuplot_cmd_ss << "plot \"" << temp_csi_path.string()
-                 << "\" using ($0):(sqrt($1**2 + $2**2)) ls 1 with lines"
-                 << std::endl;
-  fprintf(this->gnuplot, gnuplot_cmd_ss.str().c_str());
-  fflush(this->gnuplot);
-}
-
-void on_packet_arrives(pcpp::RawPacket *raw_packet, pcpp::PcapLiveDevice *dev,
-                       void *cookie) {
-  Csi_capture *cap = (Csi_capture *)cookie;
-
-  pcpp::Packet parsed_packet(raw_packet);
-  if (!parsed_packet.isPacketOfType(pcpp::UDP))
-    return;
-
-  // デコードしてクラスのメンバ変数にCSIを一時保存
-  cap->load_packet(parsed_packet);
-
-  // デコードしてクラスのメンバ変数にCSIを一時保存
-  if (cap->is_full_temp_csi()) {
-    cap->write_temp_csi();
+void Csi_capture::set_save_mode(int mode, int label) {
+  this->save_mode = mode;
+  this->label = label;
+  if (mode == 3) {
+    this->path_csi_value = this->dir_output / "dataset.csv";
   }
 }
 
+std::string Csi_capture::get_temp_mac_add() {
+  std::stringstream ss;
+  ss << std::hex << std::setw(4) << std::setfill('0')
+     << (this->temp_header.tx_mac_add & 0x0000FFFF);
+
+  return ss.str();
+}
+
+bool Csi_capture::is_target_mac() {
+  if (this->target_mac == "") {
+    return true;
+  }
+  return this->get_temp_mac_add() == this->target_mac;
+}
+
+bool Csi_capture::is_from_beacon() {
+  if (this->temp_csi.size() == 0) {
+    return false;
+  }
+
+  int cnt = 0;
+  int n_sub = this->temp_csi[0].size();
+  int th = 150;
+
+  for (int i = 0; i < n_sub; i++) {
+    if (std::abs(std::complex<float>(temp_csi[0][i].real(),
+                                     temp_csi[0][i].imag())) < th) {
+      cnt++;
+    }
+  }
+
+  return cnt > (n_sub / 2);
+}
 } // namespace csirdr

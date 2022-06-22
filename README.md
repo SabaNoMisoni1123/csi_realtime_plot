@@ -32,7 +32,7 @@ startx
 
 ### nexliveのビルド
 必要パッケージをインストール．
-```install_requirements.sh
+```
 sudo apt install libpcap-dev gnuplot cmake
 
 git clone https://github.com/seladb/PcapPlusPlus.git
