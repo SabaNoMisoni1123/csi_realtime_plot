@@ -25,12 +25,13 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <Packet.h>
 #include <filesystem>
 #include <iostream>
 #include <stdlib.h>
 #include <unordered_map>
 #include <vector>
+
+#include <Packet.h>
 
 #include "csi_reader_func.hpp"
 
@@ -66,7 +67,7 @@ public:
    * デコード実行関数
    * 初期指定，またはリストアップしたMACアドレスに従い複数のファイル出力を行う
    */
-  void decode();
+  void decode(bool rm_gurd_pilot = true);
 
 private:
   bool new_header;

@@ -25,10 +25,6 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <Packet.h>
-#include <PayloadLayer.h>
-#include <PcapFileDevice.h>
-#include <UdpLayer.h>
 #include <bitset>
 #include <complex>
 #include <fstream>
@@ -38,6 +34,11 @@
 #include <stdlib.h>
 #include <string>
 #include <vector>
+
+#include <Packet.h>
+#include <PayloadLayer.h>
+#include <PcapFileDevice.h>
+#include <UdpLayer.h>
 
 #include "csi_reader_func.hpp"
 
@@ -336,5 +337,4 @@ void write_csi(std::ofstream &ofs, std::vector<csi_vec> csi, int n_tx, int n_rx,
 
   ofs << temp_str << std::endl;
 }
-
 } // namespace csirdr

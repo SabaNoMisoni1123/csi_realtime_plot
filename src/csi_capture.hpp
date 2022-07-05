@@ -25,8 +25,6 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <Packet.h>
-#include <PcapLiveDeviceList.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -34,12 +32,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include <Packet.h>
+#include <PcapLiveDeviceList.h>
+
 #include "csi_reader_func.hpp"
 
 #ifndef CSI_CAPTURE
 #define CSI_CAPTURE
-
-#define N_ROTATE 1024
 
 namespace csirdr {
 class Csi_capture {
@@ -61,31 +60,6 @@ protected:
   int n_rx;           // 受信アンテナ
   int n_csi_elements; // CSI行列の要素数
 
-  // グラフのためのメンバ
-  // bool flag_graph;        // グラフ出力するのか
-  // FILE *gnuplot;          // gnuplot標準入力
-  // void draw_graph();      // グラフプロット
-  // std::string graph_type; // グラフにプロットするもの
-  // int n_file = 0; // ファイル番号
-
-  // ファイル保存のためのメンバ
-  std::filesystem::path dir_output; // 保存の指定をしていればこのディレクトリ
-  std::filesystem::path path_csi_value;
-  std::filesystem::path path_csi_seq;
-  int save_mode;
-  int label = 0;
-  int n_file = 0;
-
-  /*
-   * CSIヘッダ情報書き出しのファイルストリーム
-   */
-  std::ofstream ofs_csi_seq;
-
-  /*
-   * CSIデータ書き出しのファイルストリーム
-   */
-  std::ofstream ofs_csi_value;
-
   /*
    * 取得CSIの一時保存
    */
@@ -103,7 +77,7 @@ public:
    */
   Csi_capture();
   Csi_capture(std::string interface, std::string target_mac, int nrx, int ntx,
-              bool new_header, std::string wlan_std, std::string output_dir);
+              bool new_header, std::string wlan_std);
 
   ~Csi_capture(); // ディストラクタ
 
@@ -117,6 +91,12 @@ public:
    * parsed packetからCSIを算出する関数
    */
   void load_packet(pcpp::Packet parsed_packet);
+
+  /*
+   * アプリケーションを提供する関数
+   * 純粋仮想関数なので，継承したら必ずオーバーライド
+   */
+  virtual void csi_app() = 0;
 
   /*
    * 一時保存したCSIの要素数が最大なのか確認
@@ -149,14 +129,9 @@ public:
   std::vector<float> get_temp_csi_series(std::string mode);
 
   /*
-   * 一時保存したCSIデータの書き出し
-   */
-  void write_temp_csi(int save_mode, int label = 0, bool continuous = true);
-
-  /*
    * 一時保存したヘッダのMACアドレスを出力
    */
-  std::string get_temp_mac_add(); 
+  std::string get_temp_mac_add();
 
   /*
    * ターゲットMACアドレス（末尾4桁）を出力
@@ -164,31 +139,23 @@ public:
   std::string get_target_mac_add() { return this->target_mac; };
 
   /*
-   * パケットキャプチャコールバック関数
-   * 静的メンバ関数
+   * CSIが格納されたパケットが取得されたときに呼び出される関数
+   * アプリケーション関数はここで呼び出す
+   * 継承したら，同じ名前の関数で書き直す
    */
   static void on_packet_arrives(pcpp::RawPacket *raw_packet,
                                 pcpp::PcapLiveDevice *dev, void *cookie);
 
   /*
-   * CSIデータの保存モードの出力
+   * 一時保存CSIの要素数
    */
-  int csi_save_mode() { return this->save_mode; }
-
-  /*
-   * CSIデータ保存時のラベルの出力
-   */
-  int csi_label() { return this->label; }
-
-  /*
-   * CSIデータの保存モードを設定
-   */
-  void set_save_mode(int mode, int label = 0);
-
-  /*
-   * csi_valueのパス
-   */
-  const char *csi_value_path() { return this->path_csi_value.c_str(); }
+  inline int get_n_elements() {
+    if (this->temp_csi.size() == 0) {
+      return 0;
+    } else {
+      return this->temp_csi.size() * this->temp_csi[0].size();
+    }
+  }
 };
 
 } // namespace csirdr

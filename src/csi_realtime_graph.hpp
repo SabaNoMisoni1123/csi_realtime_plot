@@ -25,14 +25,15 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <Packet.h>
-#include <PcapLiveDeviceList.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdlib.h>
 #include <unordered_map>
 #include <vector>
+
+#include <Packet.h>
+#include <PcapLiveDeviceList.h>
 
 #include "csi_capture.hpp"
 #include "csi_reader_func.hpp"
@@ -47,6 +48,8 @@ private:
   FILE *gnuplot;
 
   std::string graph_type;
+  int skip;
+  int graph_counter = 0;
 
 public:
   /*
@@ -55,27 +58,35 @@ public:
    */
   Csi_plot(std::string target_mac, int nrx = 1, int ntx = 1,
            bool new_header = true, std::string wlan_std = "11ac",
-           std::string output_dir = "out");
+            int skip = 0);
 
   ~Csi_plot(); // ディストラクタ
 
   /*
-   * 運用段階の関数
+   * グラフの設定
    */
-  void run_graph(uint32_t time_sec, int top, int num_sub,
-                 std::string graph_type);
+  void set_graph_opt(int top, int num_sub, std::string graph_type);
 
   /*
-   * 運用段階のコールバック関数
+   * パケットキャプチャコールバック関数
+   * 静的メンバ関数
    */
-  static void on_packet_arrives_gnuplot(pcpp::RawPacket *raw_packet,
-                                        pcpp::PcapLiveDevice *dev,
-                                        void *cookie);
+  static void on_packet_arrives(pcpp::RawPacket *raw_packet,
+                                pcpp::PcapLiveDevice *dev, void *cookie);
+  /*
+   * グラフアプリケーション
+   */
+  void csi_app() override;
 
   /*
    * グラフタイプの出力
    */
   std::string get_graph_type() { return this->graph_type; }
+
+  /*
+   * スキップの判定
+   */
+  bool is_skip();
 };
 } // namespace csirdr
 

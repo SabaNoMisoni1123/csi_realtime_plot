@@ -138,7 +138,6 @@ csi_vec post_process_csi(csi_vec vec, std::string wlan_std);
  */
 void write_csi(std::ofstream &ofs, std::vector<csi_vec> csi, int n_tx, int n_rx,
                int mode = 0, int label = 0);
-
 } // namespace csirdr
 
 #endif /* end of include guard */

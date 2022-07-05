@@ -39,12 +39,13 @@ int main(int argc, char *argv[]) {
   ps.add<std::string>("outdir", 'o', "output directory", true);
   ps.add<std::string>("device", 'd', "csi capture device [\'asus\', \'raspi\']",
                       false, "asus");
-  ps.add("new-header", '\0', "new header");
   ps.add<int>("nss", 'N', "number with spatial streams to capture", false, 4);
   ps.add<int>("core", 'C', "number with cores where to active capture", false,
               4);
-  ps.add<std::string>("wlan-std", 's', "wlan standard [\'ac\', \'ax\']", false,
-                      "ac");
+  ps.add<std::string>("wlan-std", 's', "wlan standard [\'ac\', \'ax\']",
+                      false, "ac");
+  ps.add("new-header", '\0', "decode as new header version");
+  ps.add("non-zero", '\0', "non-zero values in guard band and pilot subcarrier");
   ps.parse_check(argc, argv);
 
   // 相対パスの処理
@@ -62,7 +63,12 @@ int main(int argc, char *argv[]) {
   csirdr::Csi_reader cr(pcap_path, outdir, ps.get<std::string>("device"),
                         ps.exist("new-header"), ps.get<int>("nss"),
                         ps.get<int>("core"), ps.get<std::string>("wlan-std"));
-  cr.decode();
+
+  if (ps.exist("non-zero")) {
+    cr.decode(false);
+  } else {
+    cr.decode();
+  }
 
   // 終了
   std::cout << "\n\n\nDONE" << std::endl;

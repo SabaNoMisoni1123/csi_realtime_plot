@@ -25,11 +25,6 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <Packet.h>
-#include <PayloadLayer.h>
-#include <PcapLiveDeviceList.h>
-#include <SystemUtils.h>
-#include <UdpLayer.h>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -39,30 +34,31 @@
 #include <string>
 #include <vector>
 
+#include <Packet.h>
+#include <PayloadLayer.h>
+#include <PcapLiveDeviceList.h>
+#include <SystemUtils.h>
+#include <UdpLayer.h>
+
 #include "csi_capture.hpp"
 #include "csi_reader_func.hpp"
 #include "csi_realtime_graph.hpp"
 
 namespace csirdr {
 Csi_plot::Csi_plot(std::string target_mac, int nrx, int ntx, bool new_header,
-                   std::string wlan_std, std::string output_dir)
-    : Csi_capture("wlan0", target_mac, nrx, ntx, new_header, wlan_std,
-                  output_dir) {
-  std::filesystem::remove(this->dir_output);
+                   std::string wlan_std, int skip)
+    : Csi_capture("wlan0", target_mac, nrx, ntx, new_header, wlan_std) {
+  this->skip = skip;
+  this->gnuplot = popen("gnuplot", "w");
 }
 
-Csi_plot::~Csi_plot() { ; }
+Csi_plot::~Csi_plot() { pclose(this->gnuplot); }
 
-void Csi_plot::run_graph(uint32_t time_sec, int top, int n_sub,
-                         std::string graph_type) {
-  this->save_mode = 2;
-  this->label = -1;
-
-  this->gnuplot = popen("gnuplot", "w");
+void Csi_plot::set_graph_opt(int top, int n_sub, std::string graph_type) {
   // gnuplot plot option setting
   fprintf(this->gnuplot, "set style line 1 lw 5 lc \'blue\'\n");
   fprintf(this->gnuplot, "set datafile separator \'\t\'\n");
-  fprintf(this->gnuplot, "set terminal x11\n");
+  fprintf(this->gnuplot, "set terminal x11 size 1280, 960\n");
   fprintf(this->gnuplot, "set nokey\n");
   fprintf(this->gnuplot, "set xlabel font\"*,20\"\n");
   fprintf(this->gnuplot, "set ylabel font\"*,20\"\n");
@@ -84,74 +80,72 @@ void Csi_plot::run_graph(uint32_t time_sec, int top, int n_sub,
     this->graph_type = "phase";
   }
   fflush(this->gnuplot);
-
-  // デバイスのオープン
-  if (!this->dev->open()) {
-    std::cerr << "Cannot open devie: " << this->interface << std::endl;
-  }
-
-  // キャプチャ開始
-  this->dev->pcpp::PcapLiveDevice::startCapture(this->on_packet_arrives_gnuplot,
-                                                this);
-
-  // 測定時間のsleep
-  // この時間の処理は，キャプチャー時のコールバック関数で実装する
-  pcpp::multiPlatformSleep(time_sec);
-
-  // キャプチャ終了
-  this->dev->pcpp::PcapLiveDevice::stopCapture();
-
-  // デバイスのクローズ
-  this->dev->close();
-
-  pclose(this->gnuplot);
 }
 
-void Csi_plot::on_packet_arrives_gnuplot(pcpp::RawPacket *raw_packet,
-                                         pcpp::PcapLiveDevice *dev,
-                                         void *cookie) {
+bool Csi_plot::is_skip() {
+  if (this->skip == 0) {
+    return false;
+  }
+
+  this->graph_counter = (this->graph_counter + 1) % (this->skip + 1);
+  return !(this->graph_counter == 1);
+}
+
+void Csi_plot::csi_app() {
+  // スキップ処理
+  if (this->is_skip()) {
+    this->clear_temp_csi();
+    return;
+  }
+
+  // MACアドレスが異なれば終了
+  if (!this->is_target_mac()) {
+    this->clear_temp_csi();
+    return;
+  }
+
+  // CSIの数が足りてなければ終了
+  if (!this->is_full_temp_csi()) {
+    return;
+  }
+
+  // ビーコンフレームなら終了
+  if (this->is_from_beacon()) {
+    this->clear_temp_csi();
+    return;
+  }
+
+  // グラフに図示するデータを取得
+  std::vector<float> data = this->get_temp_csi_series(this->get_graph_type());
+
+  // gnuplotで処理
+  fprintf(this->gnuplot, "plot \'-\' ls 1 with lines\n");
+  for (int i = 0; i < (int)data.size(); i++) {
+    fprintf(this->gnuplot, "%d\t%f\n", i, data[i]);
+  }
+  fprintf(this->gnuplot, "e\n");
+  fflush(this->gnuplot);
+
+  this->clear_temp_csi();
+}
+
+void Csi_plot::on_packet_arrives(pcpp::RawPacket *raw_packet,
+                                 pcpp::PcapLiveDevice *dev, void *cookie){
   pcpp::Packet parsed_packet(raw_packet);
   if (!parsed_packet.isPacketOfType(pcpp::UDP))
     return;
 
-  csirdr::Csi_plot *cap = (csirdr::Csi_plot *)cookie;
+  Csi_plot *cap = (Csi_plot *)cookie;
 
   // デコードしてクラスのメンバ変数にCSIを一時保存
   cap->load_packet(parsed_packet);
 
   // MACアドレスの表示
-  std::cout << "target MAC address: " << cap->get_target_mac_add()
-            << ", this CSI MAC address: " << cap->get_temp_mac_add()
-            << std::endl;
+  std::cout << "\rtarget MAC address: " << cap->get_target_mac_add()
+            << ", this CSI MAC address: " << cap->get_temp_mac_add();
 
-  // CSIの数が足りてなければ終了
-  if (!cap->is_full_temp_csi()) {
-    return;
-  }
-
-  // MACアドレスが異なれば終了
-  if (!cap->is_target_mac()) {
-    cap->clear_temp_csi();
-    return;
-  }
-
-  // ビーコンフレームなら終了
-  if (cap->is_from_beacon()) {
-    cap->clear_temp_csi();
-    return;
-  }
-
-  // グラフに図示するデータを取得
-  std::vector<float> data = cap->get_temp_csi_series(cap->get_graph_type());
-
-  // gnuplotで処理
-  fprintf(cap->gnuplot, "plot \'-\' ls 1 with lines\n");
-  for (int i = 0; i < (int)data.size(); i++) {
-    fprintf(cap->gnuplot, "%d\t%f\n", i, data[i]);
-  }
-  fprintf(cap->gnuplot, "e\n");
-  fflush(cap->gnuplot);
-
-  cap->clear_temp_csi();
+  // アプリケーション
+  cap->csi_app();
 }
+
 } // namespace csirdr

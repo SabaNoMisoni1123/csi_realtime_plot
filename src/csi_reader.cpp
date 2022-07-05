@@ -89,7 +89,7 @@ Csi_reader::Csi_reader(std::filesystem::path pcap_path,
 
 Csi_reader::~Csi_reader() { ; }
 
-void Csi_reader::decode() {
+void Csi_reader::decode(bool rm_guard_pilot) {
   // 保存用テキストファイルの作成
   // - CSIデータ
   // - シーケンス番号などの雑多データ
@@ -160,10 +160,10 @@ void Csi_reader::decode() {
     // asusやraspiの分岐はここで行う
     if (this->device == "asus") {
       temp_csi.push_back(csirdr::get_csi_from_packet_bcm4366c0(
-          payload, data_len, this->wlan_std));
+          payload, data_len, this->wlan_std, rm_guard_pilot));
     } else if (this->device == "raspi") {
-      temp_csi.push_back(
-          csirdr::get_csi_from_packet_raspi(payload, data_len, this->wlan_std));
+      temp_csi.push_back(csirdr::get_csi_from_packet_raspi(
+          payload, data_len, this->wlan_std, rm_guard_pilot));
     }
   }
 
